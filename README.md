@@ -20,9 +20,9 @@ to launch Jupyter Notebook.
 
 ## Convert PCAP to DL Directional Size and Timing Dataset
 
-#### `python pcap2dfdata.py </pcap_files_path> </pickle_files_path> --local_ip <local_ip>`
+#### `python pcap2dfdata.py </pcap_files_path> <local_ip> </pickle_files_path>`
 
-to convert pcap files to directional size and time series representation datasets saved in the specified directory.
+to convert pcap files to directional size, time, and merged 3-channel series representation datasets saved in the specified directory.
 
 ## Convert PCAP to Cell
 
@@ -32,12 +32,13 @@ to convert pcap files to directional size and time series representation dataset
 
 #### `python size_time_plot.py </pcap_files_path> </pcap_files_path> --local_ip <local_ip> --ignored_packet_sizes <size1 size2 size3 ...>`
 
-## Confusion Matrix
+## Filter PCAP Files with Sizes
 
-#### `python confusion_matrix.py <output_plot.png> <"label1, label2, label3, label4>"`
+#### `python filter_pcap.py </pcap_files_path> </pcap_files_path> <size1 size2 ...>`
+
 ## Analysis Pipeline
 
-In main.ipynb, run all cells to run the entire analysis pipeline. Note: it is assumed that all the action data are in the "action_data" directory and organized into specific structure. 
+In main.ipynb, run all cells to run the entire analysis pipeline. All the action data expected to be organized into specific structure. 
 
 ## Acknowledgements
 
