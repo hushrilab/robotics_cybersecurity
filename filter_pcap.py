@@ -1,0 +1,33 @@
+from scapy.all import rdpcap
+import os
+import argparse
+
+def filter_packets(input_file, output_file):
+    """
+    Read a pcap file, filter out packets with specific sizes, and save the result.
+    """
+    ignored_sizes=[66,78,87,77]
+    packets = rdpcap(input_file)
+    filtered_packets = [pkt for pkt in packets if len(pkt) not in ignored_sizes]
+    wrpcap(output_file, filtered_packets)
+
+def process_directory(input_dir, output_dir):
+    """
+    Recursively process directories to filter pcap files and save results with the same structure.
+    """
+    for root, dirs, files in os.walk(input_dir):
+        for file in files:
+            if file.endswith(".pcap"):
+                input_file_path = os.path.join(root, file)
+                output_file_path = os.path.join(output_dir, os.path.relpath(input_file_path, input_dir))
+                os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
+                filter_packets(input_file_path, output_file_path)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Convert pcap files to deep learning dataset.")
+    parser.add_argument("input_dir", help="Input directory containing pcap files.")
+    parser.add_argument("output_dir", help="Output directory for the converted cell files.")
+
+    args = parser.parse_args()
+
+    process_directory(args.input_dir, args.output_dir)
