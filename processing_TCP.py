@@ -11,7 +11,6 @@ from termcolor import colored
 from joblib import Parallel, delayed
 import codecs
 import io
-from tsfresh import extract_features
 
 def PrintColored(string, color):
     print(colored(string, color))
@@ -81,7 +80,7 @@ def FeatureExtractionCombined(base_dir, dest_ip, source_ip, dst_folder, action, 
         bin_dict2 = {}
         binWidth = 5
         # Generate the set of all possible bins
-        for i in range(0, 1000, binWidth):
+        for i in range(0, 2000, binWidth):
             bin_dict[i] = 0
             bin_dict2[i] = 0
 
@@ -135,13 +134,17 @@ def FeatureExtractionCombined(base_dir, dest_ip, source_ip, dst_folder, action, 
 
                     totalPackets += 1
                     pkt_size = len(buf)
-                    if padded and len(buf) < padded:
-                        pkt_size = padded
+                    remainder = pkt_size % padded
+                    if remainder == 0:
+                      if_remainder = 0
+                    else:
+                      if_remainder = 1
+                    pkt_size = (pkt_size//padded + if_remainder) * padded
                     # If source is recipient
                     if (src_ip_addr_str == dest_ip):
                         totalPacketsIn += 1
                         packetSizesIn.append(pkt_size)
-                        binned = RoundToNearest(packetSizesIn, binWidth)
+                        binned = RoundToNearest(pkt_size, binWidth)
                         bin_dict2[binned] += 1
                         if (prev_ts != 0):
                             ts_difference = max(0, ts - prev_ts)
@@ -205,6 +208,7 @@ def FeatureExtractionCombined(base_dir, dest_ip, source_ip, dst_folder, action, 
         ################################################################
         ####################Compute statistics#####################
         ################################################################
+
         try:
             ##########################################################
             # Statistical indicators for packet sizes (total)
