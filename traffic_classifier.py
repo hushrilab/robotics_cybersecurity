@@ -277,4 +277,4 @@ if __name__ == "__main__":
     x, y, feature_id = preprocess(file_path)
     warnings.filterwarnings(action='ignore', category=DeprecationWarning)
     feature_names = df.columns.tolist()
-    tpr, fpr, auc = runClassificationKFold_CV(args.class_lablels, file_path, feature_names)
+    tpr, fpr, auc = runClassificationKFold_CV(args.class_labels, file_path, feature_names)
