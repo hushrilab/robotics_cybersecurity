@@ -1,7 +1,6 @@
 import argparse
 from scapy.all import rdpcap, IP
 import os
-import glob
 
 class PacketDirection:
     def __init__(self):
@@ -31,6 +30,9 @@ def pcap_to_cell(pcap_file, output_dir_original, output_dir_modified):
     cell_filename_original = os.path.splitext(filename)[0] + ".cell"
     cell_filename_modified = os.path.splitext(filename)[0] + "_modified.cell"
 
+    ensure_dir(output_dir_original)
+    ensure_dir(output_dir_modified)
+
     with open(os.path.join(output_dir_original, cell_filename_original), 'w') as f_original, \
          open(os.path.join(output_dir_modified, cell_filename_modified), 'w') as f_modified:
         for packet in packets:
@@ -45,14 +47,16 @@ def pcap_to_cell(pcap_file, output_dir_original, output_dir_modified):
                 f_modified.write(f'{time}\t{modified_size}\n')
 
 def convert_and_save(input_dir, output_dir):
-    output_dir_original = os.path.join(output_dir, "directional_cell")
-    output_dir_modified = os.path.join(output_dir, "signed_size_cell")
-    ensure_dir(output_dir_original)
-    ensure_dir(output_dir_modified)
-    
-    for pcap_file in glob.glob(os.path.join(input_dir, '*.pcap')):
-        pcap_to_cell(pcap_file, output_dir_original, output_dir_modified)
-        print(f"Converted: {pcap_file}")
+    for root, dirs, files in os.walk(input_dir):
+        for file in files:
+            if file.endswith(".pcap"):
+                input_file_path = os.path.join(root, file)
+                rel_path = os.path.relpath(root, input_dir)
+                output_dir_original = os.path.join(output_dir, "directional_cell", rel_path)
+                output_dir_modified = os.path.join(output_dir, "signed_size_cell", rel_path)
+                
+                pcap_to_cell(input_file_path, output_dir_original, output_dir_modified)
+                print(f"Converted and saved: {input_file_path}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Convert pcap files to two versions of cell format.")
