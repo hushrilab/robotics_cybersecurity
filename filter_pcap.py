@@ -1,4 +1,4 @@
-from scapy.all import rdpcap
+from scapy.all import rdpcap, wrpcap
 import os
 import argparse
 
