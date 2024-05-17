@@ -85,8 +85,8 @@ def process_pcap_files(base_dir, local_ip, output_dir,
     merged_padded = np.stack((timings_padded_abs, sizes_padded_abs, directions_padded), axis=-1)
 
     process_and_split_data(merged_padded, labels, output_dir, "Merged")
-    process_and_split_data(timings_padded, labels, output_dir, "Timings")
-    process_and_split_data(sizes_padded, labels, output_dir, "Sizes")
+    # process_and_split_data(timings_padded, labels, output_dir, "Timings")
+    # process_and_split_data(sizes_padded, labels, output_dir, "Sizes")
 
     print("Datasets for timings, sizes, and their merger split and saved in separate subdirectories successfully.")
 

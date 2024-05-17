@@ -48,9 +48,9 @@ def plot_pcap(pcap_file, output_file, local_ip, ignored_packet_sizes):
 
     plt.figure(figsize=(10, 6))
     if ingoing_packets:
-        plt.bar(ingoing_times, ingoing_sizes, color='blue', label='Ingoing Packets', alpha=0.5, width=0.008)
+        plt.bar(ingoing_times, ingoing_sizes, color='blue', label='Ingoing Packets', alpha=0.5, width=0.02)
     if outgoing_packets:
-        plt.bar(outgoing_times, outgoing_sizes, color='red', label='Outgoing Packets', alpha=0.5, width=0.008)
+        plt.bar(outgoing_times, outgoing_sizes, color='red', label='Outgoing Packets', alpha=0.5, width=0.02)
     plt.xlabel('Time (seconds from first packet)')
     plt.ylabel('Packet Size (bytes)')
     plt.legend()
