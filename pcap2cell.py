@@ -22,13 +22,12 @@ def ensure_dir(directory):
     if not os.path.exists(directory):
         os.makedirs(directory)
 
-def pcap_to_cell(pcap_file, output_dir_original, output_dir_modified):
+def pcap_to_cell(pcap_file, output_dir_original, output_dir_modified, label, sample_index):
     packets = rdpcap(pcap_file)
     packet_direction = PacketDirection()
 
-    filename = os.path.basename(pcap_file)
-    cell_filename_original = os.path.splitext(filename)[0] + ".cell"
-    cell_filename_modified = os.path.splitext(filename)[0] + "_modified.cell"
+    cell_filename_original = f"{label}-{sample_index}.cell"
+    cell_filename_modified = f"{label}-{sample_index}.cell"
 
     ensure_dir(output_dir_original)
     ensure_dir(output_dir_modified)
@@ -47,19 +46,34 @@ def pcap_to_cell(pcap_file, output_dir_original, output_dir_modified):
                 f_modified.write(f'{time}\t{modified_size}\n')
 
 def convert_and_save(input_dir, output_dir):
+    label_count = {}
+    class_index = 0
+    class_map = {}
     for root, dirs, files in os.walk(input_dir):
-        for file in files:
-            if file.endswith(".pcap"):
-                input_file_path = os.path.join(root, file)
-                rel_path = os.path.relpath(root, input_dir)
-                output_dir_original = os.path.join(output_dir, "directional_cell", rel_path)
-                output_dir_modified = os.path.join(output_dir, "signed_size_cell", rel_path)
-                
-                pcap_to_cell(input_file_path, output_dir_original, output_dir_modified)
-                print(f"Converted and saved: {input_file_path}")
+        if files: 
+            label = os.path.basename(root)
+            print(label) 
+            if label not in class_map:
+                class_map[label] = class_index
+                class_index += 1
+            for file in files:
+                if file.endswith(".pcap"):
+                    if label not in label_count:
+                        label_count[label] = 0
+                    sample_index = label_count[label]
+                    label_count[label] += 1
 
+                    output_dir_original = os.path.join(output_dir, "directional_cell")
+                    output_dir_modified = os.path.join(output_dir, "signed_size_cell")
+
+                    input_file_path = os.path.join(root, file)
+                    pcap_to_cell(input_file_path, output_dir_original, output_dir_modified, class_map[label], sample_index)
+                    print(f"Converted and saved: Class {class_map[label]}, Sample {sample_index} - {file}")
+    print("Class label to index mapping:")
+    for label, index in class_map.items():
+        print(f"Label '{label}' is assigned to index {index}")
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Convert pcap files to two versions of cell format.")
+    parser = argparse.ArgumentParser(description="Convert pcap files to two versions of cell format with class labels.")
     parser.add_argument("input_dir", help="Input directory containing pcap files.")
     parser.add_argument("output_dir", help="Output directory for the converted cell files.")
     args = parser.parse_args()
