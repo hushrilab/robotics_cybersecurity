@@ -25,6 +25,8 @@ from itertools import combinations
 import argparse
 
 sklearn.set_config(assume_finite=True)
+def list_of_strings(arg):
+    return arg.split(',')
 
 def PrintColored(string, color):
     print(colored(string, color))
@@ -64,13 +66,12 @@ def mergeDatasets(dir_path):
                     dfs_dict[fn] = pd.concat([dfs_dict[fn], df], axis=1)
                 else:
                     dfs_dict[fn] = df
-                df['Class'] = an
         all_dataframes = list(dfs_dict.values())
         combined_df = pd.concat(all_dataframes, ignore_index=True)
         all_classes_dataframes.append(combined_df)
 
     total_df = pd.concat(all_classes_dataframes)
-    total_df = total_df.drop(total_df.columns[-1], axis=1)
+    # total_df = total_df.drop(total_df.columns[-1], axis=1)
     cols = list(total_df.columns)
     cols.append(cols.pop(cols.index('Class')))
     total_df = total_df.loc[:, cols]
@@ -78,25 +79,16 @@ def mergeDatasets(dir_path):
     total_df.to_csv(os.path.join(dir_path, 'all_classes.csv'), index=False)
 
 def preprocess(file_path):
-    f = open(file_path, 'r')
-    reader = csv.reader(f, delimiter=',')
-    pre_data = list(reader)
-    features_id = pre_data[0]
-    data = []
-    for i in pre_data[1:]:
-        int_array = []
-        for pl in i[:-1]:
-            int_array.append(float(pl))
-        int_array.append(int(i[-1]))
-        data.append(int_array)
-        
-    shuffled_data = random.sample(data, len(data))
-    labels = []
-    for i in shuffled_data:
-        labels.append(int(i[len(data[0])-1]))
+    df = pd.read_csv(file_path)
+    df.fillna(np.nan, inplace=True) 
+    data = df.values.tolist()
+    features_id = df.columns.tolist()
 
-    for i in range(0, len(shuffled_data)):
-        shuffled_data[i].pop()
+    shuffled_data = random.sample(data, len(data))
+    labels = [int(row[-1]) for row in shuffled_data]
+    for row in shuffled_data:
+        row.pop()
+
     train_x = shuffled_data
     train_y = labels
 
@@ -135,7 +127,8 @@ def runClassificationKFold_CV(class_labels, data_path, feature_names, save_dir='
     f1_scores = []
 
     i = 0
-    accumulative_cm = np.zeros((4, 4))  
+    num_classes = len(class_labels)
+    accumulative_cm = np.zeros((num_classes, num_classes))  
     for train, test in cv.split(train_x, train_y):
 
         start_train = time.time()
@@ -179,19 +172,21 @@ def runClassificationKFold_CV(class_labels, data_path, feature_names, save_dir='
         f1_scores.append(f1)
         accumulative_cm += cm
         i += 1
-        
+
+    accumulative_cm = accumulative_cm.astype(int)
     print("Confusion Matrix: ")
     print(accumulative_cm)
-    plt.plot([0, 1], [0, 1], linestyle='--', lw=2, color='r', label='Random Guess', alpha=.8)
-    print(aucs)
-    cmap = LinearSegmentedColormap.from_list('custom', [(0, 'white'), (0.1, 'lightblue'), (1, 'blue')], N=100)
+    
     plt.figure(figsize=(8, 6))
+    cmap = LinearSegmentedColormap.from_list('custom', [(0, 'white'), (0.1, 'lightblue'), (1, 'blue')], N=100)
     sns.heatmap(accumulative_cm, annot=True, fmt="d", cmap=cmap, annot_kws={"size": 20})
     plt.ylabel('True Label', fontsize=20)
     plt.xlabel('Predicted Label', fontsize=20)
     plt.xticks(np.arange(len(class_labels)) + 0.5, class_labels, fontsize=15, rotation=45)
     plt.yticks(np.arange(len(class_labels)) + 0.5, class_labels, fontsize=15, rotation=0)
+    plt.tight_layout()
     plt.savefig("confusion_matrix.png")
+
     mean_tpr = np.mean(tprs, axis=0)
     mean_tpr[-1] = 1.0
     mean_auc = auc(mean_fpr, mean_tpr)
@@ -230,9 +225,12 @@ def runClassificationKFold_CV(class_labels, data_path, feature_names, save_dir='
     plt.tight_layout()
     plt.savefig(os.path.join(save_dir, 'FeatureImportance.png'))
 
+    df_train_x = pd.DataFrame(train_x, columns=feature_names)
+    df_train_x['Class'] = train_y
+
     for feature in top_features:
         plt.figure(figsize=(5, 3))
-        sns.scatterplot(data=train_x, y=feature, x=train_y, hue=train_y, palette='bright', alpha=0.6) 
+        sns.scatterplot(data=df_train_x, y=feature, x="Class", hue="Class", palette='bright', alpha=0.6) 
         plt.title(f'Distribution of {feature} for each class')
         plt.ylabel(feature)
         plt.xlabel('Class')
@@ -268,7 +266,7 @@ def runClassificationKFold_CV(class_labels, data_path, feature_names, save_dir='
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Classification KFold.")
     parser.add_argument("directory_path", help="Input directory containing directories of extracted features.")
-    parser.add_argument("class_labels", help="Class label names.")
+    parser.add_argument("class_labels", type=list_of_strings, help="Class label names.")
     args = parser.parse_args()
     mergeDatasets(args.directory_path)
     file_path = os.path.join(args.directory_path, "all_classes.csv")
@@ -277,4 +275,5 @@ if __name__ == "__main__":
     x, y, feature_id = preprocess(file_path)
     warnings.filterwarnings(action='ignore', category=DeprecationWarning)
     feature_names = df.columns.tolist()
+    feature_names.pop()
     tpr, fpr, auc = runClassificationKFold_CV(args.class_labels, file_path, feature_names)

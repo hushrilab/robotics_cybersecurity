@@ -113,7 +113,6 @@ def FeatureExtractionCombined(base_dir, dest_ip, source_ip, dst_folder, action, 
         absTimesOut = []
         setFirst = False
         for ts, buf in pcap:
-
             if (not (setFirst)):
                 firstTime = ts
                 setFirst = True

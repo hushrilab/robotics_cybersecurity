@@ -9,7 +9,7 @@ def inet_to_str(inet):
     except ValueError:
         return socket.inet_ntop(socket.AF_INET6, inet)
 
-def plot_pcap(pcap_file, output_file, local_ip, ignored_packet_sizes):
+def plot_pcap(pcap_file, output_file, local_ip, target_ip, ignored_packet_sizes):
     ingoing_packets = []
     outgoing_packets = []
     first_timestamp = None
@@ -29,15 +29,16 @@ def plot_pcap(pcap_file, output_file, local_ip, ignored_packet_sizes):
 
                 ip = eth.data
                 src_ip = inet_to_str(ip.src)
+                dst_ip = inet_to_str(ip.dst)
                 packet_size = len(buf)
 
                 # Filter out specified packet sizes
                 if packet_size in ignored_packet_sizes:
                     continue
 
-                if src_ip != local_ip:
+                if src_ip == local_ip:
                     outgoing_packets.append((relative_time, packet_size))
-                elif src_ip == local_ip:
+                else:
                     ingoing_packets.append((relative_time, -packet_size))
 
             except Exception as e:
@@ -48,9 +49,9 @@ def plot_pcap(pcap_file, output_file, local_ip, ignored_packet_sizes):
 
     plt.figure(figsize=(10, 6))
     if ingoing_packets:
-        plt.bar(ingoing_times, ingoing_sizes, color='blue', label='Ingoing Packets', alpha=0.5, width=0.02)
+        plt.bar(ingoing_times, ingoing_sizes, color='blue', label='Ingoing Packets', alpha=0.5, width=0.1)
     if outgoing_packets:
-        plt.bar(outgoing_times, outgoing_sizes, color='red', label='Outgoing Packets', alpha=0.5, width=0.02)
+        plt.bar(outgoing_times, outgoing_sizes, color='red', label='Outgoing Packets', alpha=0.5, width=0.1)
     plt.xlabel('Time (seconds from first packet)')
     plt.ylabel('Packet Size (bytes)')
     plt.legend()
@@ -63,7 +64,8 @@ if __name__ == "__main__":
     parser.add_argument("pcap_file", help="Path to the input pcap file.")
     parser.add_argument("output_file", help="Path to save the output plot.")
     parser.add_argument("--local_ip", required=True, help="Local IP address for direction determination.")
+    parser.add_argument("--target_ip", required=True, help="Destination IP address for direction determination.")
     parser.add_argument("--ignored_packet_sizes", nargs='+', type=int, default=[], help="List of packet sizes to ignore.")
     args = parser.parse_args()
 
-    plot_pcap(args.pcap_file, args.output_file, args.local_ip, args.ignored_packet_sizes)
+    plot_pcap(args.pcap_file, args.output_file, args.local_ip, args.target_ip, args.ignored_packet_sizes)

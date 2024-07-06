@@ -26,15 +26,15 @@ to convert pcap files to directional size, time, and merged 3-channel series rep
 
 ## Convert PCAP to Cell
 
-#### `python pcap2cell.py </pcap_files_path> </pcap_files_path>`
+#### `python pcap2cell.py </pcap_files_path> </cell_files_path>`
 
 ## Time-Size Plot
 
-#### `python size_time_plot.py </pcap_files_path> </pcap_files_path> --local_ip <local_ip> --ignored_packet_sizes <size1 size2 size3 ...>`
+#### `python size_time_plot.py </pcap_files_path> </pcap_files_path> --local_ip <local_ip> --target_ip <destination_ip> --ignored_packet_sizes <size1 size2 size3 ...>`
 
 ## Filter PCAP Files with Sizes
 
-#### `python filter_pcap.py </pcap_files_path> </pcap_files_path> <size1 size2 ...>`
+#### `python filter_pcap.py </input_pcap_files_path> </output_pcap_files_path> "<size1,size2 ...>"`
 
 ## Analysis Pipeline
 

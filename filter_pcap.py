@@ -23,9 +23,11 @@ def process_directory(ignored_sizes, input_dir, output_dir):
                 filter_packets(ignored_sizes, input_file_path, output_file_path)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Filter out packets with certain sies and save results into a new directory with same structure.")
+    parser = argparse.ArgumentParser(description="Filter out packets with certain sizes and save results into a new directory with the same structure.")
     parser.add_argument("input_dir", help="Input directory containing pcap files.")
-    parser.add_argument("output_dir", help="Output directory for the filtered cell files.")
-    parser.add_argument("ignored_sizes", help="Packet sizes to be filtered out.")
+    parser.add_argument("output_dir", help="Output directory for the filtered pcap files.")
+    parser.add_argument("ignored_sizes", help="Comma-separated list of packet sizes to be filtered out.")
     args = parser.parse_args()
-    process_directory(args.ignored_sizes, args.input_dir, args.output_dir)
+    ignored_sizes = list(map(int, args.ignored_sizes.split(',')))
+    
+    process_directory(ignored_sizes, args.input_dir, args.output_dir)
