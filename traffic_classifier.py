@@ -1,7 +1,8 @@
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
-import os, sys
+import os
+import sys
 import csv
 import numpy as np
 import random
@@ -25,13 +26,17 @@ from itertools import combinations
 import argparse
 
 sklearn.set_config(assume_finite=True)
+r = 10
 def list_of_strings(arg):
     return arg.split(',')
 
 def PrintColored(string, color):
     print(colored(string, color))
 
+
 def mergeDatasets(dir_path):
+    global open_world_label 
+
     le = preprocessing.LabelEncoder()
     action_names = os.listdir(dir_path) 
     all_classes_dataframes = [] 
@@ -52,7 +57,6 @@ def mergeDatasets(dir_path):
                 if os.path.getsize(file_path) == 0:
                     print(f"Skipping empty file: {file_path}")
                     continue
-                # print("Attempting to read:", file_path)
                 df = pd.read_csv(file_path, header=None)
                 df.columns = df.iloc[0]
                 if feature in ['cart', 'gripper_position']:
@@ -71,46 +75,80 @@ def mergeDatasets(dir_path):
         all_classes_dataframes.append(combined_df)
 
     total_df = pd.concat(all_classes_dataframes)
-    # total_df = total_df.drop(total_df.columns[-1], axis=1)
     cols = list(total_df.columns)
     cols.append(cols.pop(cols.index('Class')))
     total_df = total_df.loc[:, cols]
     total_df['Class'] = le.fit_transform(total_df['Class'])
+    class_mapping = dict(zip(le.classes_, le.transform(le.classes_)))
+    open_world_label = class_mapping.get('z_open_world')
+    print("Assigned labels to each class:", class_mapping)
     total_df.to_csv(os.path.join(dir_path, 'all_classes.csv'), index=False)
 
-def preprocess(file_path):
+def preprocess(file_path, open_world_label, open_world_mode):
     df = pd.read_csv(file_path)
     df.fillna(np.nan, inplace=True) 
     data = df.values.tolist()
     features_id = df.columns.tolist()
 
-    shuffled_data = random.sample(data, len(data))
-    labels = [int(row[-1]) for row in shuffled_data]
-    for row in shuffled_data:
-        row.pop()
+    if open_world_mode:
+        known_data = [row for row in data if int(row[-1]) != open_world_label]
+        open_world_data = [row for row in data if int(row[-1]) == open_world_label]
+        random.shuffle(known_data)
+        random.shuffle(open_world_data)
 
-    train_x = shuffled_data
-    train_y = labels
+        known_labels = [int(row[-1]) for row in known_data]
+        for row in known_data:
+            row.pop()
 
-    x_shuf = []
-    y_shuf = []
-    index_shuf = list(range(len(train_x)))
-    shuffle(index_shuf)
-    for i in index_shuf:
-        x_shuf.append(train_x[i])
-        y_shuf.append(train_y[i])
+        open_world_labels = [int(row[-1]) for row in open_world_data]
+        for row in open_world_data:
+            row.pop()
+        return known_data, known_labels, open_world_data, open_world_labels, features_id
+    else:
+        shuffled_data = random.sample(data, len(data))
+        labels = [int(row[-1]) for row in shuffled_data]
+        for row in shuffled_data:
+            row.pop()
 
-    return x_shuf, y_shuf, features_id
+        return shuffled_data, labels, None, None, features_id
 
-def runClassificationKFold_CV(class_labels, data_path, feature_names, save_dir='plots'):
+def score_func(ground_truths, predictions, class_num):
+    tp, wp, fp, p, n = 0, 0, 0, 0, 0
+    for truth, prediction in zip(ground_truths, predictions):
+        print(truth)
+        print(prediction)
+        if truth != class_num:
+            p += 1
+        else:
+            n += 1
+        if prediction != class_num:
+            if truth == prediction:
+                tp += 1
+            else:
+                if truth != class_num:
+                    wp += 1
+                else:
+                    fp += 1
+    print(tp)
+    print(wp)
+    print(fp)
+    print(p)
+    print(n)
+    try:
+        r_precision = tp * n / (tp * n + wp * n + r * p * fp)
+    except ZeroDivisionError:
+        r_precision = 0.0
+
+    return r_precision
+
+def runClassificationKFold_CV(class_labels, data_path, feature_names, open_world_mode, save_dir='plots'):
     np.random.seed(1)
     random.seed(1)
 
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
-    dataset_fraction = 1.0
-    train_x, train_y, features_id = preprocess(data_path)
+    train_x, train_y, open_world_x, open_world_y, features_id = preprocess(data_path, open_world_label, open_world_mode)
     model = XGBClassifier()
 
     cv = StratifiedKFold(n_splits=10)
@@ -125,11 +163,17 @@ def runClassificationKFold_CV(class_labels, data_path, feature_names, save_dir='
     precisions = []
     recalls = []
     f1_scores = []
+    r_precisions = []
 
     i = 0
-    num_classes = len(class_labels)
+    num_classes = len(class_labels) + (1 if open_world_mode else 0)  
     accumulative_cm = np.zeros((num_classes, num_classes))  
-    for train, test in cv.split(train_x, train_y):
+    for i, (train, test) in enumerate(cv.split(train_x, train_y)):
+        if open_world_mode:
+            start_idx = i * 10
+            end_idx = start_idx + 10
+            open_world_x_chunk = open_world_x[start_idx:end_idx]
+            open_world_y_chunk = open_world_y[start_idx:end_idx]
 
         start_train = time.time()
         model = model.fit(np.asarray(train_x)[train], np.asarray(train_y)[train])
@@ -141,12 +185,18 @@ def runClassificationKFold_CV(class_labels, data_path, feature_names, save_dir='
         end_test = time.time()
         test_times.append(end_test - start_test)
 
+        y_pred = model.predict(np.asarray(train_x)[test])
+        y_true = np.asarray(train_y)[test]
+
+        if open_world_mode:
+            max_probas = np.max(probas_, axis=1)
+            y_pred = np.where(max_probas < 0.99, open_world_label, y_pred)
+
         fpr, tpr, thresholds = roc_curve(np.asarray(train_y)[test], probas_[:, 1], pos_label=1)
         
         roc_auc = auc(fpr, tpr)
 
-
-        if(roc_auc < 0.5):
+        if roc_auc < 0.5:
             roc_auc = 1 - roc_auc
             fpr = [1 - e for e in fpr]
             fpr.sort()
@@ -157,19 +207,32 @@ def runClassificationKFold_CV(class_labels, data_path, feature_names, save_dir='
         tprs[-1][0] = 0.0
         aucs.append(roc_auc)
 
-        y_pred = model.predict(np.asarray(train_x)[test])
-        y_true = np.asarray(train_y)[test]
+        if open_world_mode and open_world_x is not None and open_world_y is not None:
+            combined_x_test = np.concatenate((np.asarray(train_x)[test], open_world_x_chunk), axis=0)
+            combined_y_test = np.concatenate((np.asarray(train_y)[test], open_world_y_chunk), axis=0)
+            
+            y_pred_combined = model.predict(combined_x_test)
+            probas_combined = model.predict_proba(combined_x_test)
+
+            if open_world_mode:
+                max_probas_combined = np.max(probas_combined, axis=1)
+                y_pred_combined = np.where(max_probas_combined < 0.5, open_world_label, y_pred_combined)
+            combined_cm = confusion_matrix(combined_y_test, y_pred_combined, labels=list(range(num_classes)))
+            accumulative_cm += combined_cm
 
         accuracy = accuracy_score(y_true, y_pred)
         precision = precision_score(y_true, y_pred, average='micro')
         recall = recall_score(y_true, y_pred, average='micro')
         f1 = f1_score(y_true, y_pred, average='micro')
-        cm = confusion_matrix(y_true, y_pred)
+        r_precision = score_func(combined_y_test, y_pred_combined, len(class_labels))
+        cm = confusion_matrix(y_true, y_pred, labels=list(range(num_classes)))
 
         accuracies.append(accuracy)
         precisions.append(precision)
         recalls.append(recall)
         f1_scores.append(f1)
+        r_precisions.append(r_precision)
+
         accumulative_cm += cm
         i += 1
 
@@ -182,33 +245,35 @@ def runClassificationKFold_CV(class_labels, data_path, feature_names, save_dir='
     sns.heatmap(accumulative_cm, annot=True, fmt="d", cmap=cmap, annot_kws={"size": 20})
     plt.ylabel('True Label', fontsize=20)
     plt.xlabel('Predicted Label', fontsize=20)
-    plt.xticks(np.arange(len(class_labels)) + 0.5, class_labels, fontsize=15, rotation=45)
-    plt.yticks(np.arange(len(class_labels)) + 0.5, class_labels, fontsize=15, rotation=0)
+    plt.xticks(np.arange(len(class_labels) + (1 if open_world_mode else 0)) + 0.5, class_labels + (['Unknown'] if open_world_mode else []), fontsize=15, rotation=45)
+    plt.yticks(np.arange(len(class_labels) + (1 if open_world_mode else 0)) + 0.5, class_labels + (['Unknown'] if open_world_mode else []), fontsize=15, rotation=0)
     plt.tight_layout()
     plt.savefig("confusion_matrix.png")
 
     mean_tpr = np.mean(tprs, axis=0)
     mean_tpr[-1] = 1.0
     mean_auc = auc(mean_fpr, mean_tpr)
-    print ("Model AUC: " + "{0:.3f}".format(mean_auc))
+    print("Model AUC: " + "{0:.3f}".format(mean_auc))
 
-    if(mean_auc < 0.5):
+    if mean_auc < 0.5:
         mean_auc = 1 - mean_auc
         fpr = [1 - e for e in fpr]
         fpr.sort()
         tpr = [1 - e for e in tpr]
         tpr.sort()
-    print ("10-Fold AUC: " + "{0:.3f}".format(mean_auc))
+    print("10-Fold AUC: " + "{0:.3f}".format(mean_auc))
     
     mean_accuracy = np.mean(accuracies)
     mean_precision = np.mean(precisions)
     mean_recall = np.mean(recalls)
     mean_f1_score = np.mean(f1_scores)
+    mean_r_precision = np.mean(r_precisions)
     
     print("Mean Accuracy: {:.3f}".format(mean_accuracy))
     print("Mean Precision: {:.3f}".format(mean_precision))
     print("Mean Recall: {:.3f}".format(mean_recall))
     print("Mean F1 Score: {:.3f}".format(mean_f1_score))
+    print("R_Precision Score: {: .3f}".format(mean_r_precision))
     
     feature_importance = model.feature_importances_
     sorted_idx = np.argsort(feature_importance)[::-1]
@@ -249,7 +314,7 @@ def runClassificationKFold_CV(class_labels, data_path, feature_names, save_dir='
     tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
     plt.fill_between(mean_fpr, tprs_lower, tprs_upper, color='grey', alpha=.3, label=r'$\pm$ ROC Std. Dev.')
 
-    ax1.plot([0, 1], [0, 1], 'k--', lw=2, color='orange', label = 'Random Guess')
+    ax1.plot([0, 1], [0, 1], 'k--', lw=2, color='orange', label='Random Guess')
     ax1.grid(color='black', linestyle='dotted')
 
     plt.title('Receiver Operating Characteristic (ROC)')
@@ -267,13 +332,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Classification KFold.")
     parser.add_argument("directory_path", help="Input directory containing directories of extracted features.")
     parser.add_argument("class_labels", type=list_of_strings, help="Class label names.")
+    parser.add_argument("--open_world_mode", action='store_true', help="Enable open-world mode.")
     args = parser.parse_args()
     mergeDatasets(args.directory_path)
     file_path = os.path.join(args.directory_path, "all_classes.csv")
     df = pd.read_csv(file_path)
     df.to_csv(file_path, index=False)
-    x, y, feature_id = preprocess(file_path)
     warnings.filterwarnings(action='ignore', category=DeprecationWarning)
     feature_names = df.columns.tolist()
     feature_names.pop()
-    tpr, fpr, auc = runClassificationKFold_CV(args.class_labels, file_path, feature_names)
+    tpr, fpr, auc = runClassificationKFold_CV(args.class_labels, file_path, feature_names, args.open_world_mode)

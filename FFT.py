@@ -4,10 +4,11 @@ import collections
 import dpkt
 import socket
 import numpy as np
-from scipy.signal import stft
+from scipy.fft import fft
 from scipy.stats import kurtosis, skew
 import pywt
 import pandas as pd
+import argparse
 
 def preprocess_pcap(file_path, dest_ip, source_ip, padded):
     with open(file_path, 'rb') as f:
@@ -17,6 +18,9 @@ def preprocess_pcap(file_path, dest_ip, source_ip, padded):
         timestamps = []
         
         for ts, buf in pcap:
+            if len(buf) < 14:
+                continue
+        
             eth = dpkt.ethernet.Ethernet(buf)
             ip_hdr = eth.data
 
@@ -38,8 +42,8 @@ def preprocess_pcap(file_path, dest_ip, source_ip, padded):
         return packet_sizes, timestamps
 
 def compute_spectral_features(packet_sizes):
-    _, _, spectrogram = stft(packet_sizes, fs=1.0, nperseg=256)
-    return np.abs(spectrogram).flatten()
+    fft_result = fft(packet_sizes)
+    return np.abs(fft_result).flatten()
 
 def compute_wavelet_features(packet_sizes):
     coeffs = pywt.wavedec(packet_sizes, 'db1', level=5)
@@ -63,30 +67,48 @@ def process_pcap_files(base_dir, dest_ip, source_ip, dst_folder, padded=1):
         if not os.path.isdir(action_dir):
             continue
         
-        output_file = os.path.join(dst_folder, f"{action}_features.csv")
-        all_features = []
-        all_labels = []
+        feature_set_folder_stats = os.path.join(dst_folder, action, 'traff_stats')
+        if not os.path.exists(feature_set_folder_stats):
+            os.makedirs(feature_set_folder_stats)
         
         for sample in os.listdir(action_dir):
             if sample.endswith('.pcap'):
                 sample_path = os.path.join(action_dir, sample)
-                packet_sizes, _ = preprocess_pcap(sample_path, dest_ip, source_ip, padded)
-                features = extract_features(packet_sizes)
-                all_features.append(features)
-                all_labels.append(action)
-        
-        save_features_to_csv(all_features, all_labels, output_file)
+                packet_sizes, timestamps = preprocess_pcap(sample_path, dest_ip, source_ip, padded)
+                
+                if packet_sizes:
+                    features = extract_features(packet_sizes)
+                    all_features = features.tolist()
+                    
+                    # Generate descriptive headers
+                    spectral_feature_count = len(compute_spectral_features(packet_sizes))
+                    wavelet_feature_count = len(compute_wavelet_features(packet_sizes))
+                    headers = [f'spectral_feature_{i+1}' for i in range(spectral_feature_count)] + \
+                              [f'wavelet_feature_{i+1}' for i in range(wavelet_feature_count)]
+                    headers.append('Class')
+                    
+                    # Append the class label to features
+                    all_features.append(action)
+                    
+                    # Convert to DataFrame
+                    df = pd.DataFrame([all_features], columns=headers)
+                    output_file_features = os.path.join(feature_set_folder_stats, f"{sample[:-5]}_features.csv")
+                    
+                    # Write to CSV with headers
+                    df.to_csv(output_file_features, index=False)
 
 def main():
-    base_dir = 'path/to/pcap/files'
-    dest_ip = '192.168.1.1'
-    source_ip = '192.168.1.2'
-    dst_folder = 'path/to/output/csv/files'
+    parser = argparse.ArgumentParser(description="Run Feature Extraction for FFT.")
+    parser.add_argument("base_dir", help="Input directory containing pcap files to be extracted.")
+    parser.add_argument("dest_ip", help="Destination IP address.")
+    parser.add_argument("source_ip", help="Source IP address.")
+    parser.add_argument("dst_folder", help="Output directory for the extracted features to be.")
+    args = parser.parse_args()
+
+    if not os.path.exists(args.dst_folder):
+        os.makedirs(args.dst_folder)
     
-    if not os.path.exists(dst_folder):
-        os.makedirs(dst_folder)
-    
-    process_pcap_files(base_dir, dest_ip, source_ip, dst_folder)
+    process_pcap_files(args.base_dir, args.dest_ip, args.source_ip, args.dst_folder)
 
 if __name__ == '__main__':
     main()
